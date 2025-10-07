@@ -4,13 +4,17 @@ interface Player {
   ammo: number
   kills: number
   currency: number
+  pistolMag: number // Added pistol magazine count
+  maxPistolMag: number // Added max pistol magazine size
 }
 
 interface GameHUDProps {
   player: Player
+  powerupActive: boolean
+  currentWeapon: number
 }
 
-export function GameHUD({ player }: GameHUDProps) {
+export function GameHUD({ player, powerupActive, currentWeapon }: GameHUDProps) {
   const healthPercent = (player.health / player.maxHealth) * 100
 
   return (
@@ -36,47 +40,79 @@ export function GameHUD({ player }: GameHUDProps) {
             </div>
           </div>
 
-          {/* Icon bar */}
           <div className="flex items-center justify-center gap-4">
-            <div className="flex h-8 w-8 items-center justify-center rounded bg-gray-800">
-              <span className="text-lg">💀</span>
-            </div>
-            <div className="flex h-8 w-8 items-center justify-center rounded bg-gray-800">
-              <span className="text-lg">💣</span>
-            </div>
-            <div className="flex h-8 w-8 items-center justify-center rounded bg-gray-800">
-              <span className="text-lg">🛡️</span>
-            </div>
-            <div className="flex h-8 w-8 items-center justify-center rounded bg-gray-800">
-              <span className="text-lg">⏸️</span>
-            </div>
+            {powerupActive && (
+              <div className="flex h-8 w-8 items-center justify-center rounded bg-purple-600 animate-pulse">
+                <span className="text-lg">⚡</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       <div className="absolute bottom-8 left-8 flex flex-col gap-3">
+        {/* Primary weapon (rifle) with ammo */}
         <div className="flex items-center gap-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded border-2 border-white bg-gray-900/80">
-            <span className="font-mono text-xl font-bold text-white">3</span>
+          <div
+            className={`flex h-12 w-12 items-center justify-center rounded border-2 ${
+              currentWeapon === 3 ? "border-yellow-400 bg-yellow-900/80" : "border-white bg-gray-900/80"
+            }`}
+          >
+            <span className={`font-mono text-xl font-bold ${currentWeapon === 3 ? "text-yellow-400" : "text-white"}`}>
+              3
+            </span>
           </div>
-          <div className="relative h-16 w-20 rounded border-2 border-gray-600 bg-gray-800/80 p-1">
+          <div
+            className={`relative h-16 w-20 rounded border-2 ${
+              currentWeapon === 3 ? "border-yellow-400" : "border-white"
+            } bg-gray-800/80 p-1`}
+          >
             <div className="h-full w-full bg-gray-700" />
             {/* Ammo counter inside weapon slot */}
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="font-mono text-2xl font-bold text-white">{String(player.ammo).padStart(2, "0")}</span>
+              <span
+                className={`font-mono text-2xl font-bold ${currentWeapon === 3 ? "text-yellow-400" : "text-white"}`}
+              >
+                {String(player.ammo).padStart(2, "0")}
+              </span>
             </div>
           </div>
         </div>
+        {/* Secondary weapon (pistol) */}
         <div className="flex items-center gap-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded border-2 border-gray-600 bg-gray-900/80">
-            <span className="font-mono text-xl font-bold text-gray-500">1</span>
+          <div
+            className={`flex h-12 w-12 items-center justify-center rounded border-2 ${
+              currentWeapon === 1 ? "border-yellow-400 bg-yellow-900/80" : "border-gray-600 bg-gray-900/80"
+            }`}
+          >
+            <span
+              className={`font-mono text-xl font-bold ${currentWeapon === 1 ? "text-yellow-400" : "text-gray-500"}`}
+            >
+              1
+            </span>
           </div>
-          <div className="h-16 w-20 rounded border-2 border-gray-600 bg-gray-800/80 p-1">
+          <div
+            className={`relative h-16 w-20 rounded border-2 ${
+              currentWeapon === 1 ? "border-yellow-400" : "border-gray-600"
+            } bg-gray-800/80 p-1`}
+          >
             <div className="h-full w-full bg-gray-700" />
+            {/* Pistol icon */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-2xl">🔫</span>
+            </div>
+            <div className="absolute bottom-0 right-1">
+              <span
+                className={`font-mono text-sm font-bold ${currentWeapon === 1 ? "text-yellow-400" : "text-gray-500"}`}
+              >
+                {player.pistolMag}/{player.maxPistolMag}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
+      {/* Cash and kills in bottom right */}
       <div className="absolute bottom-8 right-8 flex flex-col gap-2">
         {/* Kills/Score */}
         <div className="rounded-sm bg-gray-900/80 px-4 py-2">

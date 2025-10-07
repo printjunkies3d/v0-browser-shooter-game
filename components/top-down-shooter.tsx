@@ -14,6 +14,8 @@ interface Player {
   kills: number
   speed: number
   currency: number
+  pistolMag: number // Added pistol magazine (8 shots)
+  maxPistolMag: number // Max magazine size
 }
 
 interface Enemy {
@@ -103,6 +105,76 @@ export default function TopDownShooter() {
   const [doorPrompt, setDoorPrompt] = useState<{ cost: number } | null>(null)
   const [minimapUpdate, setMinimapUpdate] = useState(0)
   const [controllerConnected, setControllerConnected] = useState(false) // Track controller connection
+  const [selectedMenuButton, setSelectedMenuButton] = useState(0) // 0 = Start Game, 1 = Settings
+  const [selectedSettingsButton, setSelectedSettingsButton] = useState(0) // For settings close button
+  const [reloadPrompt, setReloadPrompt] = useState(false) // Added reload prompt state
+  const [soundVolume, setSoundVolume] = useState(0.7)
+  const [musicVolume, setMusicVolume] = useState(0.5)
+
+  const audioRef = useRef({
+    pistolShot: null as HTMLAudioElement | null,
+    rifleShot: null as HTMLAudioElement | null,
+    reloadPistol: null as HTMLAudioElement | null,
+    reloadRifle: null as HTMLAudioElement | null,
+    powerUp: null as HTMLAudioElement | null,
+    pickUp: null as HTMLAudioElement | null,
+    playerHit: null as HTMLAudioElement | null,
+    backgroundMusic: null as HTMLAudioElement | null,
+  })
+
+  useEffect(() => {
+    audioRef.current.pistolShot = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/pistol_shot-bhyZs43SVR7HBLvPlhvaOADimIkZKw.mp3")
+    audioRef.current.rifleShot = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/rifle_shot-1-zXs37Z3ueEDoalZTKiDPct92piQHOI.mp3")
+    audioRef.current.reloadPistol = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/reload-pistol-LOaTJayReT8mQAkOTl5t9vn3o1ZFXe.mp3")
+    audioRef.current.reloadRifle = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/reload_rifle-VsgYhDvJXYisTsaRsvxR9SkmrhjnyA.mp3")
+    audioRef.current.powerUp = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/power_up_1-z5darWlmQuP4cIkzPzz92SDw9Dw3OA.mp3")
+    audioRef.current.pickUp = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/pick_up_1-vI2V9ErXiLnTU8nNHUKuxYEXMtzq68.mp3")
+    audioRef.current.playerHit = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/player_hit_1-PwM34yXXuc2LC8QVXr80GYPv0S8RFt.mp3")
+    audioRef.current.backgroundMusic = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Pixel%20Showdown-3theMsMrKGoJy55zq4eQHPge5HTVqt.mp3")
+
+    // Set background music to loop
+    if (audioRef.current.backgroundMusic) {
+      audioRef.current.backgroundMusic.loop = true
+    }
+
+    return () => {
+      // Cleanup audio on unmount
+      Object.values(audioRef.current).forEach((audio) => {
+        if (audio) {
+          audio.pause()
+          audio.src = ""
+        }
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    Object.entries(audioRef.current).forEach(([key, audio]) => {
+      if (audio) {
+        if (key === "backgroundMusic") {
+          audio.volume = musicVolume
+        } else {
+          audio.volume = soundVolume
+        }
+      }
+    })
+  }, [soundVolume, musicVolume])
+
+  const playSound = (soundName: keyof typeof audioRef.current) => {
+    const audio = audioRef.current[soundName]
+    if (audio && soundName !== "backgroundMusic") {
+      audio.currentTime = 0
+      audio.play().catch((e) => console.log("[v0] Audio play failed:", e))
+    }
+  }
+
+  useEffect(() => {
+    if (gameStarted && !gameOver) {
+      audioRef.current.backgroundMusic?.play().catch((e) => console.log("[v0] Music play failed:", e))
+    } else {
+      audioRef.current.backgroundMusic?.pause()
+    }
+  }, [gameStarted, gameOver])
 
   const gameStateRef = useRef({
     player: {
@@ -115,6 +187,8 @@ export default function TopDownShooter() {
       kills: 0,
       speed: 3,
       currency: 100,
+      pistolMag: 8, // Start with full magazine
+      maxPistolMag: 8,
     } as Player,
     enemies: [] as Enemy[],
     bullets: [] as Bullet[],
@@ -133,29 +207,35 @@ export default function TopDownShooter() {
       { x: 0, y: 0, width: 20, height: WORLD_HEIGHT },
       { x: WORLD_WIDTH - 20, y: 0, width: 20, height: WORLD_HEIGHT },
 
-      // Room dividers - creating multiple areas
-      { x: 600, y: 20, width: 20, height: 500 },
-      { x: 600, y: 700, width: 20, height: 1280 },
-      { x: 620, y: 600, width: 580, height: 20 },
-      { x: 1400, y: 600, width: 380, height: 20 },
-      { x: 1780, y: 20, width: 20, height: 580 },
-      { x: 1780, y: 900, width: 20, height: 1080 },
-      { x: 620, y: 1200, width: 580, height: 20 },
-      { x: 1400, y: 1200, width: 380, height: 20 },
+      // Main vertical divider (left section)
+      { x: 700, y: 20, width: 30, height: 450 },
+      { x: 700, y: 750, width: 30, height: 1230 },
 
-      // Interior obstacles
-      { x: 300, y: 400, width: 200, height: 20 },
-      { x: 900, y: 300, width: 20, height: 200 },
-      { x: 1000, y: 1400, width: 200, height: 20 },
-      { x: 200, y: 800, width: 300, height: 20 },
-      { x: 2200, y: 1200, width: 300, height: 20 },
-      { x: 2400, y: 400, width: 20, height: 300 },
+      // Main vertical divider (middle section)
+      { x: 1500, y: 20, width: 30, height: 550 },
+      { x: 1500, y: 900, width: 30, height: 1080 },
+
+      // Horizontal dividers
+      { x: 730, y: 600, width: 470, height: 30 },
+      { x: 1530, y: 600, width: 470, height: 30 },
+      { x: 730, y: 1300, width: 470, height: 30 },
+      { x: 1530, y: 1300, width: 470, height: 30 },
+
+      // Interior obstacles for cover
+      { x: 200, y: 400, width: 250, height: 30 },
+      { x: 300, y: 900, width: 30, height: 250 },
+      { x: 900, y: 300, width: 30, height: 200 },
+      { x: 1100, y: 1100, width: 200, height: 30 },
+      { x: 1700, y: 300, width: 250, height: 30 },
+      { x: 2200, y: 800, width: 30, height: 300 },
+      { x: 2000, y: 1500, width: 300, height: 30 },
+      { x: 400, y: 1600, width: 200, height: 30 },
     ] as Wall[],
     doors: [
-      { x: 600, y: 540, width: 20, height: 140, cost: 100, isOpen: false, id: 0 },
-      { x: 1220, y: 600, width: 160, height: 20, cost: 150, isOpen: false, id: 1 },
-      { x: 1780, y: 620, width: 20, height: 260, cost: 200, isOpen: false, id: 2 },
-      { x: 1220, y: 1200, width: 160, height: 20, cost: 150, isOpen: false, id: 3 },
+      { x: 700, y: 490, width: 30, height: 240, cost: 100, isOpen: false, id: 0 }, // Vertical door - fully blocks
+      { x: 1220, y: 600, width: 260, height: 30, cost: 150, isOpen: false, id: 1 }, // Horizontal door - fully blocks
+      { x: 1500, y: 590, width: 30, height: 290, cost: 200, isOpen: false, id: 2 }, // Vertical door - fully blocks
+      { x: 1220, y: 1300, width: 260, height: 30, cost: 150, isOpen: false, id: 3 }, // Horizontal door - fully blocks
     ] as Door[],
     keys: {} as Record<string, boolean>,
     mouseX: 0,
@@ -175,7 +255,99 @@ export default function TopDownShooter() {
     lastHealth: 100,
     cameraX: 0,
     cameraY: 0,
+    lastMouseMoveTime: 0,
+    usingMouse: false,
+    currentWeapon: 3, // 3 = primary rifle, 1 = pistol
+    lastWeaponSwitch: 0, // Debounce weapon switching
+    lastTriggerState: false, // Track trigger state for single-shot pistol
+    isReloading: false, // Track reload state
+    reloadStartTime: 0, // Track reload timing
   })
+
+  useEffect(() => {
+    if (gameStarted) return // Only handle menu navigation when not in game
+
+    const handleMenuNavigation = (e: KeyboardEvent) => {
+      if (showSettings) {
+        // Settings menu navigation
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          setShowSettings(false)
+        }
+      } else {
+        // Main menu navigation
+        if (e.key === "ArrowUp") {
+          e.preventDefault()
+          setSelectedMenuButton((prev) => Math.max(0, prev - 1))
+        } else if (e.key === "ArrowDown") {
+          e.preventDefault()
+          setSelectedMenuButton((prev) => Math.min(1, prev + 1))
+        } else if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          if (selectedMenuButton === 0) {
+            startGame()
+          } else {
+            setShowSettings(true)
+          }
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleMenuNavigation)
+
+    // Controller menu navigation
+    let lastButtonPress = 0
+    const checkGamepadMenu = () => {
+      if (gameStateRef.current.gamepadIndex >= 0) {
+        const gamepads = navigator.getGamepads()
+        const gamepad = gamepads[gameStateRef.current.gamepadIndex]
+
+        if (gamepad) {
+          const now = Date.now()
+          if (now - lastButtonPress < 200) return // Debounce
+
+          if (showSettings) {
+            // Settings menu navigation
+            // A button to close settings
+            if (gamepad.buttons[0]?.pressed) {
+              lastButtonPress = now
+              setShowSettings(false)
+            }
+          } else {
+            // Main menu navigation
+            // D-pad or left stick for navigation
+            const upPressed = gamepad.buttons[12]?.pressed || gamepad.axes[1] < -0.5
+            const downPressed = gamepad.buttons[13]?.pressed || gamepad.axes[1] > 0.5
+
+            if (upPressed) {
+              lastButtonPress = now
+              setSelectedMenuButton((prev) => Math.max(0, prev - 1))
+            } else if (downPressed) {
+              lastButtonPress = now
+              setSelectedMenuButton((prev) => Math.min(1, prev + 1))
+            }
+
+            // A button to select
+            if (gamepad.buttons[0]?.pressed) {
+              lastButtonPress = now
+              if (selectedMenuButton === 0) {
+                startGame()
+              } else {
+                setShowSettings(true)
+              }
+            }
+          }
+        }
+      }
+    }
+
+    const menuInterval = setInterval(checkGamepadMenu, 100)
+
+    return () => {
+      window.removeEventListener("keydown", handleMenuNavigation)
+      clearInterval(menuInterval)
+    }
+  }, [gameStarted, showSettings, selectedMenuButton])
 
   useEffect(() => {
     const handleGamepadConnected = (e: GamepadEvent) => {
@@ -243,6 +415,21 @@ export default function TopDownShooter() {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       state.keys[e.key.toLowerCase()] = true
+
+      if (e.key === "1") {
+        state.currentWeapon = 1
+      } else if (e.key === "3") {
+        state.currentWeapon = 3
+      }
+
+      if (e.key.toLowerCase() === "r") {
+        if (state.currentWeapon === 1 && state.player.pistolMag < state.player.maxPistolMag && !state.isReloading) {
+          state.isReloading = true
+          state.reloadStartTime = Date.now()
+          playSound("reloadPistol")
+        }
+      }
+
       if (e.key.toLowerCase() === "e") {
         let doorPurchased = false
         state.doors.forEach((door) => {
@@ -290,6 +477,8 @@ export default function TopDownShooter() {
       const canvasY = e.clientY - rect.top
       state.mouseX = canvasX + state.cameraX
       state.mouseY = canvasY + state.cameraY
+      state.lastMouseMoveTime = Date.now()
+      state.usingMouse = true
     }
 
     const handleMouseDown = () => {
@@ -300,11 +489,27 @@ export default function TopDownShooter() {
       state.mouseDown = false
     }
 
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const now = Date.now()
+      if (now - state.lastWeaponSwitch < 200) return // Debounce
+
+      if (e.deltaY < 0) {
+        // Scroll up - switch to weapon 3
+        state.currentWeapon = 3
+      } else if (e.deltaY > 0) {
+        // Scroll down - switch to weapon 1
+        state.currentWeapon = 1
+      }
+      state.lastWeaponSwitch = now
+    }
+
     window.addEventListener("keydown", handleKeyDown)
     window.addEventListener("keyup", handleKeyUp)
     canvas.addEventListener("mousemove", handleMouseMove)
     canvas.addEventListener("mousedown", handleMouseDown)
     canvas.addEventListener("mouseup", handleMouseUp)
+    canvas.addEventListener("wheel", handleWheel, { passive: false })
 
     const spawnEnemy = () => {
       if (state.enemies.length >= MAX_ENEMIES) return
@@ -386,6 +591,15 @@ export default function TopDownShooter() {
     const gameLoop = (timestamp: number) => {
       const previousHealth = state.lastHealth
 
+      if (state.isReloading) {
+        const reloadTime = 1500 // 1.5 seconds to reload
+        if (Date.now() - state.reloadStartTime >= reloadTime) {
+          state.player.pistolMag = state.player.maxPistolMag
+          state.isReloading = false
+          setReloadPrompt(false)
+        }
+      }
+
       let usingController = false
 
       if (state.gamepadIndex >= 0) {
@@ -417,23 +631,61 @@ export default function TopDownShooter() {
           if (Math.abs(rightStickX) > deadzone || Math.abs(rightStickY) > deadzone) {
             state.player.angle = Math.atan2(rightStickY, rightStickX)
             usingController = true // Mark that controller is controlling aim
+            state.usingMouse = false // Disable mouse aim when using controller
           }
 
-          // Right trigger (RT) for shooting
-          const rightTrigger = gamepad.buttons[7]?.value || 0
-          if (rightTrigger > 0.5 && state.player.ammo > 0 && timestamp - state.lastShot > 150) {
-            const bulletSpeed = 8
-            state.bullets.push({
-              x: state.player.x,
-              y: state.player.y,
-              vx: Math.cos(state.player.angle) * bulletSpeed,
-              vy: Math.sin(state.player.angle) * bulletSpeed,
-              id: state.nextBulletId++,
-            })
-            state.player.ammo--
-            state.lastShot = timestamp
-            createParticles(state.player.x, state.player.y, 3, "#ffff00")
+          if (gamepad.buttons[2]?.pressed) {
+            if (state.currentWeapon === 1 && state.player.pistolMag < state.player.maxPistolMag && !state.isReloading) {
+              state.isReloading = true
+              state.reloadStartTime = Date.now()
+              playSound("reloadPistol")
+            }
           }
+
+          if (gamepad.buttons[3]?.pressed) {
+            const now = Date.now()
+            if (now - state.lastWeaponSwitch > 300) {
+              // Debounce
+              state.currentWeapon = state.currentWeapon === 3 ? 1 : 3 // Toggle between weapons
+              state.lastWeaponSwitch = now
+            }
+          }
+
+          const rightTrigger = gamepad.buttons[7]?.value || 0
+          const triggerPressed = rightTrigger > 0.5
+
+          if (triggerPressed && timestamp - state.lastShot > 150 && !state.isReloading) {
+            // For pistol, check trigger state for single-shot
+            const canShootPistol = state.currentWeapon === 1 && !state.lastTriggerState && state.player.pistolMag > 0
+            // For rifle, allow continuous shooting
+            const canShootRifle = state.currentWeapon === 3 && state.player.ammo > 0
+
+            if (canShootPistol || canShootRifle) {
+              const bulletSpeed = 8
+              state.bullets.push({
+                x: state.player.x,
+                y: state.player.y,
+                vx: Math.cos(state.player.angle) * bulletSpeed,
+                vy: Math.sin(state.player.angle) * bulletSpeed,
+                id: state.nextBulletId++,
+              })
+
+              if (state.currentWeapon === 3) {
+                state.player.ammo--
+                playSound("rifleShot")
+              } else {
+                state.player.pistolMag--
+                playSound("pistolShot")
+              }
+
+              state.lastShot = timestamp
+              createParticles(state.player.x, state.player.y, 3, "#ffff00")
+            } else if (state.currentWeapon === 1 && state.player.pistolMag === 0) {
+              setReloadPrompt(true)
+            }
+          }
+
+          state.lastTriggerState = triggerPressed
 
           // A button (button 0) for interaction
           if (gamepad.buttons[0]?.pressed) {
@@ -483,10 +735,47 @@ export default function TopDownShooter() {
         state.lastEnemySpawn = timestamp
       }
 
-      if (!usingController) {
+      if (!usingController && state.usingMouse) {
         const dx = state.mouseX - state.player.x
         const dy = state.mouseY - state.player.y
         state.player.angle = Math.atan2(dy, dx)
+      }
+
+      if (state.mouseDown && timestamp - state.lastShot > 150 && !state.isReloading) {
+        // For pistol, check if this is a new click (single-shot)
+        const canShootPistol = state.currentWeapon === 1 && !state.lastTriggerState && state.player.pistolMag > 0
+        // For rifle, allow continuous shooting
+        const canShootRifle = state.currentWeapon === 3 && state.player.ammo > 0
+
+        if (canShootPistol || canShootRifle) {
+          const bulletSpeed = 8
+          state.bullets.push({
+            x: state.player.x,
+            y: state.player.y,
+            vx: Math.cos(state.player.angle) * bulletSpeed,
+            vy: Math.sin(state.player.angle) * bulletSpeed,
+            id: state.nextBulletId++,
+          })
+
+          if (state.currentWeapon === 3) {
+            state.player.ammo--
+            playSound("rifleShot")
+          } else {
+            state.player.pistolMag--
+            playSound("pistolShot")
+          }
+
+          state.lastShot = timestamp
+          createParticles(state.player.x, state.player.y, 3, "#ffff00")
+        } else if (state.currentWeapon === 1 && state.player.pistolMag === 0) {
+          setReloadPrompt(true)
+        }
+      }
+
+      if (!state.mouseDown) {
+        state.lastTriggerState = false
+      } else {
+        state.lastTriggerState = true
       }
 
       let newX = state.player.x
@@ -523,14 +812,17 @@ export default function TopDownShooter() {
           if (drop.type === "ammo") {
             state.player.ammo = Math.min(state.player.ammo + 15, 100)
             createParticles(drop.x, drop.y, 8, "#ffaa00")
+            playSound("pickUp")
           } else if (drop.type === "money") {
             state.player.currency += 50
             createParticles(drop.x, drop.y, 8, "#00ff00")
+            playSound("pickUp")
           } else if (drop.type === "powerup") {
             state.powerupActive = true
             state.powerupEndTime = timestamp + 5000
             state.player.speed = 5
             createParticles(drop.x, drop.y, 12, "#ff00ff")
+            playSound("powerUp")
           }
           return false
         }
@@ -637,6 +929,7 @@ export default function TopDownShooter() {
       if (state.player.health < previousHealth) {
         state.damageFlash = 30 // Flash for 30 frames
         state.screenShake = 10 // Shake for 10 frames
+        playSound("playerHit")
       }
       state.lastHealth = state.player.health
 
@@ -820,6 +1113,7 @@ export default function TopDownShooter() {
       canvas.removeEventListener("mousemove", handleMouseMove)
       canvas.removeEventListener("mousedown", handleMouseDown)
       canvas.removeEventListener("mouseup", handleMouseUp)
+      canvas.removeEventListener("wheel", handleWheel)
     }
   }, [gameStarted, gameOver])
 
@@ -838,6 +1132,8 @@ export default function TopDownShooter() {
         kills: 0,
         speed: 3,
         currency: 100,
+        pistolMag: 8, // Reset pistol magazine
+        maxPistolMag: 8,
       },
       enemies: [],
       bullets: [],
@@ -850,30 +1146,41 @@ export default function TopDownShooter() {
         { x: 2600, y: 800, type: "health", cost: HEALTH_COST, size: BUY_STATION_SIZE },
       ],
       walls: [
+        // Outer walls
         { x: 0, y: 0, width: WORLD_WIDTH, height: 20 },
         { x: 0, y: WORLD_HEIGHT - 20, width: WORLD_WIDTH, height: 20 },
         { x: 0, y: 0, width: 20, height: WORLD_HEIGHT },
         { x: WORLD_WIDTH - 20, y: 0, width: 20, height: WORLD_HEIGHT },
-        { x: 600, y: 20, width: 20, height: 500 },
-        { x: 600, y: 700, width: 20, height: 1280 },
-        { x: 620, y: 600, width: 580, height: 20 },
-        { x: 1400, y: 600, width: 380, height: 20 },
-        { x: 1780, y: 20, width: 20, height: 580 },
-        { x: 1780, y: 900, width: 20, height: 1080 },
-        { x: 620, y: 1200, width: 580, height: 20 },
-        { x: 1400, y: 1200, width: 380, height: 20 },
-        { x: 300, y: 400, width: 200, height: 20 },
-        { x: 900, y: 300, width: 20, height: 200 },
-        { x: 1000, y: 1400, width: 200, height: 20 },
-        { x: 200, y: 800, width: 300, height: 20 },
-        { x: 2200, y: 1200, width: 300, height: 20 },
-        { x: 2400, y: 400, width: 20, height: 300 },
+
+        // Main vertical divider (left section)
+        { x: 700, y: 20, width: 30, height: 450 },
+        { x: 700, y: 750, width: 30, height: 1230 },
+
+        // Main vertical divider (middle section)
+        { x: 1500, y: 20, width: 30, height: 550 },
+        { x: 1500, y: 900, width: 30, height: 1080 },
+
+        // Horizontal dividers
+        { x: 730, y: 600, width: 470, height: 30 },
+        { x: 1530, y: 600, width: 470, height: 30 },
+        { x: 730, y: 1300, width: 470, height: 30 },
+        { x: 1530, y: 1300, width: 470, height: 30 },
+
+        // Interior obstacles for cover
+        { x: 200, y: 400, width: 250, height: 30 },
+        { x: 300, y: 900, width: 30, height: 250 },
+        { x: 900, y: 300, width: 30, height: 200 },
+        { x: 1100, y: 1100, width: 200, height: 30 },
+        { x: 1700, y: 300, width: 250, height: 30 },
+        { x: 2200, y: 800, width: 30, height: 300 },
+        { x: 2000, y: 1500, width: 300, height: 30 },
+        { x: 400, y: 1600, width: 200, height: 30 },
       ],
       doors: [
-        { x: 600, y: 540, width: 20, height: 140, cost: 100, isOpen: false, id: 0 },
-        { x: 1220, y: 600, width: 160, height: 20, cost: 150, isOpen: false, id: 1 },
-        { x: 1780, y: 620, width: 20, height: 260, cost: 200, isOpen: false, id: 2 },
-        { x: 1220, y: 1200, width: 160, height: 20, cost: 150, isOpen: false, id: 3 },
+        { x: 700, y: 490, width: 30, height: 240, cost: 100, isOpen: false, id: 0 }, // Vertical door - fully blocks
+        { x: 1220, y: 600, width: 260, height: 30, cost: 150, isOpen: false, id: 1 }, // Horizontal door - fully blocks
+        { x: 1500, y: 590, width: 30, height: 290, cost: 200, isOpen: false, id: 2 }, // Vertical door - fully blocks
+        { x: 1220, y: 1300, width: 260, height: 30, cost: 150, isOpen: false, id: 3 }, // Horizontal door - fully blocks
       ],
       keys: {},
       mouseX: 0,
@@ -893,6 +1200,13 @@ export default function TopDownShooter() {
       lastHealth: 100,
       cameraX: 0,
       cameraY: 0,
+      lastMouseMoveTime: 0,
+      usingMouse: false,
+      currentWeapon: 3,
+      lastWeaponSwitch: 0,
+      lastTriggerState: false,
+      isReloading: false,
+      reloadStartTime: 0,
     }
   }
 
@@ -906,20 +1220,27 @@ export default function TopDownShooter() {
             <p className="font-mono">Mouse - Aim</p>
             <p className="font-mono">Click - Shoot</p>
             <p className="font-mono">E - Buy at Station / Open Door</p>
+            <p className="font-mono">1/3 or Scroll - Switch Weapon</p>
             <p className="font-mono text-sm opacity-70">
-              Controller: Left Stick - Move, Right Stick - Aim, RT - Shoot, A - Interact
+              Controller: Left Stick - Move, Right Stick - Aim, RT - Shoot, A - Interact, Y - Switch Weapon
             </p>
           </div>
           <div className="flex flex-col items-center gap-4">
             <button
               onClick={startGame}
-              className="bg-primary px-8 py-4 font-mono text-xl font-bold text-primary-foreground transition-all hover:bg-primary/80"
+              className={`px-8 py-4 font-mono text-xl font-bold transition-all ${
+                selectedMenuButton === 0
+                  ? "scale-110 bg-primary text-primary-foreground ring-4 ring-primary/50"
+                  : "bg-primary text-primary-foreground hover:bg-primary/80"
+              }`}
             >
               START GAME
             </button>
             <button
               onClick={() => setShowSettings(true)}
-              className="border-2 border-primary bg-transparent px-8 py-4 font-mono text-xl font-bold text-primary transition-all hover:bg-primary/10"
+              className={`border-2 border-primary bg-transparent px-8 py-4 font-mono text-xl font-bold text-primary transition-all ${
+                selectedMenuButton === 1 ? "scale-110 bg-primary/20 ring-4 ring-primary/50" : "hover:bg-primary/10"
+              }`}
             >
               SETTINGS
             </button>
@@ -929,7 +1250,11 @@ export default function TopDownShooter() {
         <>
           <div className="relative">
             <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="border-2 border-primary" />
-            <GameHUD player={gameStateRef.current.player} />
+            <GameHUD
+              player={gameStateRef.current.player}
+              powerupActive={gameStateRef.current.powerupActive}
+              currentWeapon={gameStateRef.current.currentWeapon}
+            />
             <MiniMap
               player={gameStateRef.current.player}
               enemies={gameStateRef.current.enemies}
@@ -940,6 +1265,14 @@ export default function TopDownShooter() {
               canvasHeight={WORLD_HEIGHT}
               updateTrigger={minimapUpdate}
             />
+
+            {reloadPrompt && (
+              <div className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded border-2 border-destructive bg-card/90 px-6 py-3 font-mono backdrop-blur-sm">
+                <p className="text-center text-lg font-bold text-destructive">
+                  Press R{controllerConnected ? " or X" : ""} to RELOAD
+                </p>
+              </div>
+            )}
 
             {doorPrompt && (
               <div className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded border-2 border-primary bg-card/90 px-6 py-3 font-mono backdrop-blur-sm">
@@ -964,7 +1297,7 @@ export default function TopDownShooter() {
                 <h2 className="mb-4 font-mono text-6xl font-bold text-destructive">GAME OVER</h2>
                 <p className="mb-8 font-mono text-2xl text-foreground">Kills: {gameStateRef.current.player.kills}</p>
                 <button
-                  onClick={startGame}
+                  onClick={() => window.location.reload()}
                   className="bg-primary px-8 py-4 font-mono text-xl font-bold text-primary-foreground transition-all hover:bg-primary/80"
                 >
                   RESTART
@@ -980,17 +1313,33 @@ export default function TopDownShooter() {
           <div className="w-full max-w-md rounded-lg border-2 border-primary bg-card p-8">
             <h2 className="mb-6 font-mono text-3xl font-bold text-primary">SETTINGS</h2>
             <div className="mb-8 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-foreground">Sound Volume</span>
-                <span className="font-mono text-muted-foreground">100%</span>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-foreground">Sound Volume</span>
+                  <span className="font-mono text-muted-foreground">{Math.round(soundVolume * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={soundVolume * 100}
+                  onChange={(e) => setSoundVolume(Number(e.target.value) / 100)}
+                  className="w-full"
+                />
               </div>
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-foreground">Music Volume</span>
-                <span className="font-mono text-muted-foreground">80%</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-foreground">Controller Sensitivity</span>
-                <span className="font-mono text-muted-foreground">Medium</span>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-foreground">Music Volume</span>
+                  <span className="font-mono text-muted-foreground">{Math.round(musicVolume * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={musicVolume * 100}
+                  onChange={(e) => setMusicVolume(Number(e.target.value) / 100)}
+                  className="w-full"
+                />
               </div>
               <div className="flex items-center justify-between">
                 <span className="font-mono text-foreground">Controller Status</span>
