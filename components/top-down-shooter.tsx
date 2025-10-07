@@ -108,73 +108,6 @@ export default function TopDownShooter() {
   const [selectedMenuButton, setSelectedMenuButton] = useState(0) // 0 = Start Game, 1 = Settings
   const [selectedSettingsButton, setSelectedSettingsButton] = useState(0) // For settings close button
   const [reloadPrompt, setReloadPrompt] = useState(false) // Added reload prompt state
-  const [soundVolume, setSoundVolume] = useState(0.7)
-  const [musicVolume, setMusicVolume] = useState(0.5)
-
-  const audioRef = useRef({
-    pistolShot: null as HTMLAudioElement | null,
-    rifleShot: null as HTMLAudioElement | null,
-    reloadPistol: null as HTMLAudioElement | null,
-    reloadRifle: null as HTMLAudioElement | null,
-    powerUp: null as HTMLAudioElement | null,
-    pickUp: null as HTMLAudioElement | null,
-    playerHit: null as HTMLAudioElement | null,
-    backgroundMusic: null as HTMLAudioElement | null,
-  })
-
-  useEffect(() => {
-    audioRef.current.pistolShot = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/pistol_shot-bhyZs43SVR7HBLvPlhvaOADimIkZKw.mp3")
-    audioRef.current.rifleShot = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/rifle_shot-1-zXs37Z3ueEDoalZTKiDPct92piQHOI.mp3")
-    audioRef.current.reloadPistol = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/reload-pistol-LOaTJayReT8mQAkOTl5t9vn3o1ZFXe.mp3")
-    audioRef.current.reloadRifle = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/reload_rifle-VsgYhDvJXYisTsaRsvxR9SkmrhjnyA.mp3")
-    audioRef.current.powerUp = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/power_up_1-z5darWlmQuP4cIkzPzz92SDw9Dw3OA.mp3")
-    audioRef.current.pickUp = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/pick_up_1-vI2V9ErXiLnTU8nNHUKuxYEXMtzq68.mp3")
-    audioRef.current.playerHit = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/player_hit_1-PwM34yXXuc2LC8QVXr80GYPv0S8RFt.mp3")
-    audioRef.current.backgroundMusic = new Audio("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Pixel%20Showdown-3theMsMrKGoJy55zq4eQHPge5HTVqt.mp3")
-
-    // Set background music to loop
-    if (audioRef.current.backgroundMusic) {
-      audioRef.current.backgroundMusic.loop = true
-    }
-
-    return () => {
-      // Cleanup audio on unmount
-      Object.values(audioRef.current).forEach((audio) => {
-        if (audio) {
-          audio.pause()
-          audio.src = ""
-        }
-      })
-    }
-  }, [])
-
-  useEffect(() => {
-    Object.entries(audioRef.current).forEach(([key, audio]) => {
-      if (audio) {
-        if (key === "backgroundMusic") {
-          audio.volume = musicVolume
-        } else {
-          audio.volume = soundVolume
-        }
-      }
-    })
-  }, [soundVolume, musicVolume])
-
-  const playSound = (soundName: keyof typeof audioRef.current) => {
-    const audio = audioRef.current[soundName]
-    if (audio && soundName !== "backgroundMusic") {
-      audio.currentTime = 0
-      audio.play().catch((e) => console.log("[v0] Audio play failed:", e))
-    }
-  }
-
-  useEffect(() => {
-    if (gameStarted && !gameOver) {
-      audioRef.current.backgroundMusic?.play().catch((e) => console.log("[v0] Music play failed:", e))
-    } else {
-      audioRef.current.backgroundMusic?.pause()
-    }
-  }, [gameStarted, gameOver])
 
   const gameStateRef = useRef({
     player: {
@@ -426,7 +359,6 @@ export default function TopDownShooter() {
         if (state.currentWeapon === 1 && state.player.pistolMag < state.player.maxPistolMag && !state.isReloading) {
           state.isReloading = true
           state.reloadStartTime = Date.now()
-          playSound("reloadPistol")
         }
       }
 
@@ -638,7 +570,6 @@ export default function TopDownShooter() {
             if (state.currentWeapon === 1 && state.player.pistolMag < state.player.maxPistolMag && !state.isReloading) {
               state.isReloading = true
               state.reloadStartTime = Date.now()
-              playSound("reloadPistol")
             }
           }
 
@@ -672,10 +603,8 @@ export default function TopDownShooter() {
 
               if (state.currentWeapon === 3) {
                 state.player.ammo--
-                playSound("rifleShot")
               } else {
                 state.player.pistolMag--
-                playSound("pistolShot")
               }
 
               state.lastShot = timestamp
@@ -759,10 +688,8 @@ export default function TopDownShooter() {
 
           if (state.currentWeapon === 3) {
             state.player.ammo--
-            playSound("rifleShot")
           } else {
             state.player.pistolMag--
-            playSound("pistolShot")
           }
 
           state.lastShot = timestamp
@@ -812,17 +739,14 @@ export default function TopDownShooter() {
           if (drop.type === "ammo") {
             state.player.ammo = Math.min(state.player.ammo + 15, 100)
             createParticles(drop.x, drop.y, 8, "#ffaa00")
-            playSound("pickUp")
           } else if (drop.type === "money") {
             state.player.currency += 50
             createParticles(drop.x, drop.y, 8, "#00ff00")
-            playSound("pickUp")
           } else if (drop.type === "powerup") {
             state.powerupActive = true
             state.powerupEndTime = timestamp + 5000
             state.player.speed = 5
             createParticles(drop.x, drop.y, 12, "#ff00ff")
-            playSound("powerUp")
           }
           return false
         }
@@ -929,7 +853,6 @@ export default function TopDownShooter() {
       if (state.player.health < previousHealth) {
         state.damageFlash = 30 // Flash for 30 frames
         state.screenShake = 10 // Shake for 10 frames
-        playSound("playerHit")
       }
       state.lastHealth = state.player.health
 
@@ -1313,33 +1236,17 @@ export default function TopDownShooter() {
           <div className="w-full max-w-md rounded-lg border-2 border-primary bg-card p-8">
             <h2 className="mb-6 font-mono text-3xl font-bold text-primary">SETTINGS</h2>
             <div className="mb-8 space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-foreground">Sound Volume</span>
-                  <span className="font-mono text-muted-foreground">{Math.round(soundVolume * 100)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={soundVolume * 100}
-                  onChange={(e) => setSoundVolume(Number(e.target.value) / 100)}
-                  className="w-full"
-                />
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-foreground">Sound Volume</span>
+                <span className="font-mono text-muted-foreground">100%</span>
               </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-foreground">Music Volume</span>
-                  <span className="font-mono text-muted-foreground">{Math.round(musicVolume * 100)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={musicVolume * 100}
-                  onChange={(e) => setMusicVolume(Number(e.target.value) / 100)}
-                  className="w-full"
-                />
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-foreground">Music Volume</span>
+                <span className="font-mono text-muted-foreground">80%</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-foreground">Controller Sensitivity</span>
+                <span className="font-mono text-muted-foreground">Medium</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="font-mono text-foreground">Controller Status</span>
